@@ -19,12 +19,23 @@ class SmartTestGenerator:
         genai.configure(api_key=api_key)
         # Try new API first (v0.8+), fall back to old API
         try:
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
-            self.use_new_api = True
-        except AttributeError:
+            # Try different model names for new API
+            for model_name in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']:
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    self.use_new_api = True
+                    print(f"✅ Using model: {model_name}")
+                    break
+                except Exception as e:
+                    print(f"⚠️  Model {model_name} failed: {e}")
+                    continue
+            else:
+                raise Exception("No compatible model found")
+        except (AttributeError, Exception):
             # Fall back to older API (v0.1.0rc1)
             self.model = None
             self.use_new_api = False
+            print("📋 Using legacy API (v0.1.0rc1)")
         self.dependency_map = {}
 
     def build_dependency_map(self, repo_path: str) -> Dict[str, str]:
@@ -72,9 +83,21 @@ class SmartTestGenerator:
                 response = self.model.generate_content(prompt)
                 test_code = response.text.strip()
             else:
-                # Use older API (v0.1.0rc1)
-                response = genai.generate_text(prompt=prompt)
-                test_code = response.result.strip()
+                # Use older API (v0.1.0rc1) - try different approaches
+                try:
+                    # Try with model specification
+                    model = genai.GenerativeModel('gemini-pro')
+                    response = model.generate_content(prompt)
+                    test_code = response.text.strip()
+                except:
+                    # Fall back to direct generate_text if available
+                    try:
+                        response = genai.generate_text(prompt=prompt)
+                        test_code = response.result.strip()
+                    except:
+                        # Last resort - try basic completion
+                        response = genai.generate_text(model='gemini-pro', prompt=prompt)
+                        test_code = response.result.strip()
 
             # POST-PROCESSING: Clean up common AI generation issues
             test_code = self._post_process_test_code(test_code, analysis, analysis['includes'])
