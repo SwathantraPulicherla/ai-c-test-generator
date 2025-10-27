@@ -19,8 +19,8 @@ class SmartTestGenerator:
         genai.configure(api_key=api_key)
         # Try new API first (v0.8+), fall back to old API
         try:
-            # Try different model names for new API
-            for model_name in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']:
+            # Try different model names for new API, starting with the best available
+            for model_name in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']:
                 try:
                     self.model = genai.GenerativeModel(model_name)
                     self.use_new_api = True
