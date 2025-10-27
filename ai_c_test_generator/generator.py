@@ -17,7 +17,14 @@ class SmartTestGenerator:
 
     def __init__(self, api_key: str):
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        # Try new API first (v0.8+), fall back to old API
+        try:
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            self.use_new_api = True
+        except AttributeError:
+            # Fall back to older API (v0.1.0rc1)
+            self.model = None
+            self.use_new_api = False
         self.dependency_map = {}
 
     def build_dependency_map(self, repo_path: str) -> Dict[str, str]:
@@ -61,8 +68,13 @@ class SmartTestGenerator:
 
         # Generate tests
         try:
-            response = self.model.generate_content(prompt)
-            test_code = response.text.strip()
+            if self.use_new_api:
+                response = self.model.generate_content(prompt)
+                test_code = response.text.strip()
+            else:
+                # Use older API (v0.1.0rc1)
+                response = genai.generate_text(prompt=prompt)
+                test_code = response.result.strip()
 
             # POST-PROCESSING: Clean up common AI generation issues
             test_code = self._post_process_test_code(test_code, analysis, analysis['includes'])
