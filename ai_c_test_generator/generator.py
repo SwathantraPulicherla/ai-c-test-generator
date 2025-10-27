@@ -17,25 +17,23 @@ class SmartTestGenerator:
 
     def __init__(self, api_key: str):
         genai.configure(api_key=api_key)
-        # Try new API first (v0.8+), fall back to old API
-        try:
-            # Try different model names for new API, starting with the best available
-            for model_name in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']:
-                try:
-                    self.model = genai.GenerativeModel(model_name)
-                    self.use_new_api = True
-                    print(f"✅ Using model: {model_name}")
-                    break
-                except Exception as e:
-                    print(f"⚠️  Model {model_name} failed: {e}")
-                    continue
-            else:
-                raise Exception("No compatible model found")
-        except (AttributeError, Exception):
-            # Fall back to older API (v0.1.0rc1)
-            self.model = None
-            self.use_new_api = False
-            print("📋 Using legacy API (v0.1.0rc1)")
+
+        # Use modern API (v0.8.0+) with fallback models
+        self.models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+        self.model = None
+
+        for model_name in self.models_to_try:
+            try:
+                self.model = genai.GenerativeModel(model_name)
+                print(f"✅ Using model: {model_name}")
+                break
+            except Exception as e:
+                print(f"⚠️  Model {model_name} failed: {e}")
+                continue
+
+        if self.model is None:
+            raise Exception("No compatible Gemini model found. Please check your API key and internet connection.")
+
         self.dependency_map = {}
 
     def build_dependency_map(self, repo_path: str) -> Dict[str, str]:
@@ -77,27 +75,10 @@ class SmartTestGenerator:
         # Build targeted prompt for this file only
         prompt = self._build_targeted_prompt(analysis, functions_that_need_stubs, repo_path)
 
-        # Generate tests
+        # Generate tests using modern API
         try:
-            if self.use_new_api:
-                response = self.model.generate_content(prompt)
-                test_code = response.text.strip()
-            else:
-                # Use older API (v0.1.0rc1) - try different approaches
-                try:
-                    # Try with model specification
-                    model = genai.GenerativeModel('gemini-pro')
-                    response = model.generate_content(prompt)
-                    test_code = response.text.strip()
-                except:
-                    # Fall back to direct generate_text if available
-                    try:
-                        response = genai.generate_text(prompt=prompt)
-                        test_code = response.result.strip()
-                    except:
-                        # Last resort - try basic completion
-                        response = genai.generate_text(model='gemini-pro', prompt=prompt)
-                        test_code = response.result.strip()
+            response = self.model.generate_content(prompt)
+            test_code = response.text.strip()
 
             # POST-PROCESSING: Clean up common AI generation issues
             test_code = self._post_process_test_code(test_code, analysis, analysis['includes'])
