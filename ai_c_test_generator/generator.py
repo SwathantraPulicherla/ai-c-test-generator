@@ -242,4 +242,16 @@ Generate ONLY the complete C test file code. No explanations.
         if not has_unity:
             cleaned_lines.insert(0, '#include "unity.h"')
 
-        return '\n'.join(cleaned_lines)
+        # Add Unity main function with RUN_TEST calls for all test functions
+        test_code_with_main = '\n'.join(cleaned_lines)
+        test_functions = re.findall(r'void\s+(test_\w+)\s*\(', test_code_with_main)
+
+        if test_functions:
+            main_function = '\n\nint main(void) {\n    UNITY_BEGIN();\n\n'
+            for test_func in test_functions:
+                main_function += f'    RUN_TEST({test_func});\n'
+            main_function += '\n    return UNITY_END();\n}'
+
+            test_code_with_main += main_function
+
+        return test_code_with_main
