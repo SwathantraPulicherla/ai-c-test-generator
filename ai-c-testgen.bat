@@ -1,0 +1,2 @@
+@echo off
+python -c "import sys; sys.path.insert(0, r'C:\Users\SwathantraPulicherla\OneDrive - requisimus Holding GmbH\Desktop\AI_tools_project\workspaces\demo\ai-c-test-generator'); from ai_c_test_generator.cli import main; main()" %*
