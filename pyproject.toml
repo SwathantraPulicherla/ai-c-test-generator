@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-c-test-generator"
+version = "1.0.0"
+description = "AI-powered C unit test generator using Google Gemini"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    {name = "AI Test Generator Team", email = "testgen@example.com"},
+]
+maintainers = [
+    {name = "AI Test Generator Team", email = "testgen@example.com"},
+]
+keywords = ["c", "testing", "unit-tests", "ai", "gemini", "code-generation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Code Generators",
+]
+dependencies = [
+    "google-generativeai>=0.8.0",
+    "python-dotenv>=0.19.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/ai-c-test-generator"
+Documentation = "https://github.com/your-org/ai-c-test-generator#readme"
+Repository = "https://github.com/your-org/ai-c-test-generator.git"
+Issues = "https://github.com/your-org/ai-c-test-generator/issues"
+Changelog = "https://github.com/your-org/ai-c-test-generator/blob/main/CHANGELOG.md"
+
+[project.scripts]
+ai-c-testgen = "ai_c_test_generator.cli:main"
+
+[tool.setuptools]
+packages = ["ai_c_test_generator"]
+package-dir = {"" = "."}
+
+[tool.setuptools.package-data]
+ai_c_test_generator = ["*.txt", "*.md"]

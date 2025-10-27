@@ -1,0 +1,5 @@
+include README.md
+include LICENSE
+include requirements.txt
+recursive-include ai_c_test_generator *.txt
+recursive-include ai_c_test_generator *.md
