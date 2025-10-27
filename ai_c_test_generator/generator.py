@@ -103,7 +103,7 @@ class SmartTestGenerator:
         rel_path = os.path.relpath(analysis['file_path'], repo_path)
 
         prompt = f"""
-Generate Unity tests for this C file: {rel_path}
+Generate HIGH-QUALITY Unity tests for this C file: {rel_path}
 
 SOURCE CODE TO TEST:
 ```c
@@ -113,74 +113,90 @@ SOURCE CODE TO TEST:
 FUNCTIONS TO TEST:
 {chr(10).join(f"- {func['return_type']} {func['name']}" for func in analysis['functions'])}
 
-FUNCTIONS THAT NEED STUBS (implement these as stub functions):
+FUNCTIONS THAT NEED STUBS (implement these as configurable stub functions):
 {chr(10).join(f"- {func_name}" for func_name in functions_that_need_stubs) or "- None"}
 
-CRITICAL REQUIREMENTS - FOLLOW THESE EXACTLY TO AVOID COMPILATION ERRORS:
+# CRITICAL REQUIREMENTS FOR HIGH-QUALITY TESTS
 
-1. OUTPUT FORMAT:
+## 1. OUTPUT FORMAT:
    - Generate ONLY clean C code with NO markdown markers (```c, ```)
    - NO explanations, comments about generation, or extra text
    - Start directly with #include statements
 
-2. COMPILATION SAFETY:
+## 2. COMPILATION SAFETY:
    - Include ONLY "unity.h" and existing header files from the source
-   - DO NOT include non-existent headers (like "main.h" if no main.h exists)
+   - DO NOT include non-existent headers
    - Function signatures must EXACTLY match the source code
-   - NO calls to main() or other functions that don't exist in testable form
+   - NO calls to main() or functions that don't exist
 
-3. FLOATING POINT HANDLING:
+## 3. REALISTIC TEST VALUES (CRITICAL FOR QUALITY):
+   - Temperature sensors: -40°C to +125°C (normal range: 0°C to 50°C)
+   - Voltage sensors: 0V to 5V (never negative or >5.5V)
+   - Current sensors: 0A to 10A (never negative)
+   - Counters/timers: 0 to UINT32_MAX
+   - Boolean states: only 0 or 1, true or false
+   - NEVER test impossible values like absolute zero (-273°C) or negative voltages
+
+## 4. FLOATING POINT HANDLING:
    - ALWAYS use TEST_ASSERT_FLOAT_WITHIN(tolerance, expected, actual)
-   - NEVER use TEST_ASSERT_EQUAL_FLOAT (causes precision failures)
-   - Use tolerance 0.01f for temperature comparisons
+   - Temperature tolerance: 0.1f degrees
+   - Voltage tolerance: 0.01f volts
+   - Current tolerance: 0.001f amps
+   - NEVER use TEST_ASSERT_EQUAL_FLOAT
 
-4. STUB IMPLEMENTATION:
+## 5. STUB IMPLEMENTATION (HIGH QUALITY):
    - Implement stubs for ALL listed functions that need stubs
    - Stubs must have EXACT same signature as source functions
-   - Use static variables for call counts and return values
-   - Reset ALL stub state in setUp() function
+   - Use static variables: call_count, return_value, last_param
+   - setUp(): Reset ALL stub variables to 0/default
+   - tearDown(): Reset ALL stub variables to 0/default
+   - Allow test code to configure stub return values
 
-5. TEST DESIGN:
-   - Test functions individually, not main() or complex workflows
-   - Use realistic values within sensor operational ranges
-   - Include setUp() and tearDown() for proper isolation
-   - Each test should be independent and focused
+## 6. COMPREHENSIVE TEST SCENARIOS:
 
-6. UNITY FRAMEWORK USAGE:
-   - Use TEST_ASSERT_* macros correctly
+### NORMAL OPERATION TESTS:
+   - Test with typical values in middle of operational range
+   - Test expected behavior under normal conditions
+   - Verify correct calculations and logic
+
+### EDGE CASE TESTS:
+   - Minimum operational values (e.g., 0°C for temperature)
+   - Maximum operational values (e.g., 125°C for temperature)
+   - Boundary conditions (just above/below limits)
+   - Zero values where applicable
+   - Maximum valid values
+
+### ERROR CONDITION TESTS:
+   - Invalid inputs (out of range values)
+   - NULL pointers (if applicable)
+   - Division by zero scenarios
+   - Overflow conditions
+
+## 7. UNITY FRAMEWORK BEST PRACTICES:
    - TEST_ASSERT_TRUE/TEST_ASSERT_FALSE for boolean results
-   - TEST_ASSERT_EQUAL for integers
+   - TEST_ASSERT_EQUAL for integers and enums
    - TEST_ASSERT_FLOAT_WITHIN for floating point
-   - TEST_ASSERT_EQUAL_STRING for string comparisons
+   - TEST_ASSERT_EQUAL_STRING for strings
+   - TEST_ASSERT_NULL/TEST_ASSERT_NOT_NULL for pointers
 
-VALIDATION REQUIREMENTS - FOLLOW THESE CRITERIA:
+## 8. TEST ISOLATION & STRUCTURE:
+   - Each test function tests ONE specific behavior
+   - Use descriptive test names: test_[function]_[scenario]
+   - setUp() initializes test state
+   - tearDown() cleans up and resets stubs
+   - Tests should be independent and repeatable
 
-1. COMPILATION SAFETY:
-   - Include ALL necessary headers (#include "unity.h", source headers)
-   - Ensure stub function signatures EXACTLY match source function signatures
-   - No duplicate symbol definitions
+# QUALITY VALIDATION CRITERIA (YOU MUST MEET THESE):
 
-2. REALITY CHECKS:
-   - Use realistic test values within operational ranges
-   - Avoid impossible scenarios (temperatures below absolute zero, etc.)
-   - Stubs must match actual function return types and parameters
-   - Use appropriate tolerance for floating-point comparisons (TEST_ASSERT_FLOAT_WITHIN)
+✅ COMPILATION: Code must compile without errors
+✅ REALISTIC: Use only physically possible test values
+✅ EDGE CASES: Include min/max/boundary value tests
+✅ STUB RESET: tearDown() must reset ALL stub variables
+✅ FLOAT TOLERANCE: Use TEST_ASSERT_FLOAT_WITHIN, never TEST_ASSERT_EQUAL_FLOAT
+✅ TEST ISOLATION: Each test independent, proper setUp/tearDown
+✅ MEANINGFUL ASSERTIONS: Test actual behavior, not just function calls
 
-3. TEST QUALITY:
-   - Cover edge cases (min/max values, zero, boundaries)
-   - Test error conditions where applicable
-   - Reset stubs properly in setUp()/tearDown() functions
-   - Each test should verify meaningful behavior
-   - Avoid redundant or trivial test cases
-
-4. LOGICAL CONSISTENCY:
-   - Test names should match their actual content
-   - No contradictory assertions within tests
-   - Use reasonable threshold values for comparisons
-   - Proper use of TEST_ASSERT_* macros
-   - tearDown() must reset ALL stub variables (call counts and return values) to 0/default values
-
-INSTRUCTIONS:
+# INSTRUCTIONS:
 
 Create a complete Unity test file named test_{os.path.basename(analysis['file_path'])}
 
@@ -204,7 +220,7 @@ Generate ONLY the complete C test file code. No explanations.
             return "// Unable to read file"
 
     def _post_process_test_code(self, test_code: str, analysis: Dict, source_includes: List[str]) -> str:
-        """Post-process generated test code to fix common issues"""
+        """Post-process generated test code to fix common issues and improve quality"""
 
         # Remove markdown code block markers
         test_code = re.sub(r'^```c?\s*', '', test_code, flags=re.MULTILINE)
@@ -216,6 +232,13 @@ Generate ONLY the complete C test file code. No explanations.
             r'TEST_ASSERT_FLOAT_WITHIN(0.01f, \1, \2)',
             test_code
         )
+
+        # Fix unrealistic temperature values (absolute zero or impossible ranges)
+        test_code = re.sub(r'-273\.15f?', '-40.0f', test_code)  # Replace absolute zero with realistic minimum
+        test_code = re.sub(r'1e10+', '1000.0f', test_code)      # Replace extremely large values
+
+        # Fix negative voltage/current values (replace with 0)
+        test_code = re.sub(r'-\d+\.?\d*f?\b', '0.0f', test_code)
 
         # Remove invalid function calls (like main())
         test_code = re.sub(r'\bmain\s*\(\s*\)\s*;', '', test_code)
