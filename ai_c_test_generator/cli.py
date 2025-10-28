@@ -325,7 +325,7 @@ def main():
     args = parser.parse_args()
 
     # Default to generate command if no subcommand specified
-    if not hasattr(args, 'command') or args.command is None:
+    if getattr(args, 'command', None) is None:
         args.command = 'generate'
 
     # Route to appropriate handler
