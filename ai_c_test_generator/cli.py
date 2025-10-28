@@ -8,6 +8,18 @@ import os
 import sys
 from pathlib import Path
 
+# Add compatibility for older Python versions
+try:
+    from importlib.metadata import packages_distributions
+except ImportError:
+    # Python < 3.10 compatibility
+    try:
+        from importlib_metadata import packages_distributions
+    except ImportError:
+        # Fallback implementation
+        def packages_distributions():
+            return {}
+
 from .generator import SmartTestGenerator
 from .validator import TestValidator
 from .navigator import CodeNavigator
@@ -38,7 +50,7 @@ Examples:
     )
 
     # Add subcommands
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    subparsers = parser.add_subparsers(dest='command', help='Available commands', required=False)
 
     # Test generation command (default behavior)
     generate_parser = subparsers.add_parser('generate', help='Generate unit tests (default)')
@@ -322,7 +334,19 @@ def validate_environment(args):
 def main():
     """Main CLI entry point"""
     parser = create_parser()
-    args = parser.parse_args()
+
+    # Handle case where no arguments are provided
+    if len(sys.argv) == 1:
+        # No arguments provided, default to generate command
+        args = parser.parse_args(['generate'])
+    else:
+        try:
+            args = parser.parse_args()
+        except SystemExit as e:
+            # If parsing failed, print debug info and re-raise
+            print(f"DEBUG: Failed to parse arguments: {sys.argv}", file=sys.stderr)
+            print(f"DEBUG: Available commands: generate, navigate, find-func, find-calls", file=sys.stderr)
+            raise
 
     # Default to generate command if no subcommand specified
     if getattr(args, 'command', None) is None:
@@ -338,6 +362,7 @@ def main():
     elif args.command == 'find-calls':
         sys.exit(handle_find_calls(args))
     else:
+        print(f"ERROR: Unknown command '{args.command}'", file=sys.stderr)
         parser.print_help()
         sys.exit(1)
 
