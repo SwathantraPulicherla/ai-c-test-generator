@@ -83,9 +83,13 @@ class TestValidator:
         # Check for invalid includes (headers that don't exist)
         invalid_includes = []
         include_pattern = re.compile(r'#include\s+["<]([^">]+)[">]')
+        # Common standard C library headers that are acceptable in tests
+        standard_headers = {'stdio.h', 'stdlib.h', 'string.h', 'math.h', 'assert.h', 'ctype.h', 'errno.h', 'limits.h', 'stdarg.h', 'stddef.h', 'stdint.h', 'stdbool.h', 'time.h'}
+        
         for match in include_pattern.finditer(test_content):
             header = match.group(1)
-            if header not in source_includes and header != 'unity.h' and not header.startswith('std'):
+            # Allow unity.h, standard library headers, and headers from source
+            if header != 'unity.h' and header not in standard_headers and header not in source_includes:
                 # Check if it's a valid header file that should exist
                 if not any(header in inc for inc in source_includes):
                     invalid_includes.append(header)
@@ -114,10 +118,15 @@ class TestValidator:
             result['issues'].append(f"Duplicate function definitions: {duplicates}")
             result['compiles'] = False
 
-        # Check for invalid function calls (like main())
-        if re.search(r'\bmain\s*\(', test_content):
-            result['issues'].append("Invalid call to main() function - not suitable for unit testing")
-            result['compiles'] = False
+        # Check for invalid function calls (like main()) - but allow if main() is simple and testable
+        # Only flag actual calls to main(), not the test runner's main() function definition
+        main_calls = re.findall(r'\bmain\s*\([^)]*\)\s*;', test_content)
+        if main_calls:
+            # Allow main() testing if it's declared as extern and called like a regular function
+            # This is acceptable for simple main functions that don't have complex setup
+            if not re.search(r'extern\s+int\s+main\s*\(\s*void\s*\)\s*;', test_content):
+                result['issues'].append("Invalid call to main() function - not suitable for unit testing")
+                result['compiles'] = False
 
     def _check_reality_tests(self, test_content: str, source_functions: List[Dict], result: Dict):
         """Validate reality checks"""
@@ -141,10 +150,13 @@ class TestValidator:
                     result['issues'].append(f"Line {i}: {description} - unrealistic test scenario")
                     result['realistic'] = False
 
-        # Check floating point comparisons have tolerance
+        # Check floating point comparisons have tolerance - only for actual assertions
         float_assertions = re.findall(r'TEST_ASSERT_FLOAT_WITHIN\s*\([^)]+\)', test_content)
-        if not float_assertions and ('float' in test_content.lower() or '.0f' in test_content):
-            result['issues'].append("Floating-point values present but no TEST_ASSERT_FLOAT_WITHIN found")
+        float_equal_assertions = re.findall(r'TEST_ASSERT_EQUAL_FLOAT\s*\([^)]+\)', test_content)
+
+        # Only flag if there are float equality assertions without tolerance
+        if float_equal_assertions and not float_assertions:
+            result['issues'].append("TEST_ASSERT_EQUAL_FLOAT used - will fail due to precision. Use TEST_ASSERT_FLOAT_WITHIN instead")
             result['realistic'] = False
 
         # Check stub return types match expected ranges
@@ -194,18 +206,23 @@ class TestValidator:
         has_teardown = 'tearDown(' in test_content
 
         if has_setup and has_teardown:
-            # Verify stubs are reset - check for either reset functions or direct variable resets
-            has_reset_functions = 'reset_' in test_content
-            # Check for direct variable resets in tearDown (e.g., var_name = 0)
-            teardown_section = re.search(r'void tearDown\(void\)\s*{([^}]*)}', test_content, re.DOTALL)
-            has_direct_resets = False
-            if teardown_section:
-                teardown_content = teardown_section.group(1)
-                # Look for variable assignments to 0, 0.0f, NULL, etc.
-                has_direct_resets = bool(re.search(r'\w+\s*=\s*(0|0\.0f|NULL|false);', teardown_content))
+            # Check if there are stub variables that need resetting
+            # Stub variables typically start with 'g_' and are used for call counts/return values
+            stub_variables = re.findall(r'static\s+\w+\s+g_\w+;', test_content)
+            
+            if stub_variables:  # Only require tearDown resets if there are actual stub variables
+                # Verify stubs are reset - check for either reset functions or direct variable resets
+                has_reset_functions = 'reset_' in test_content
+                # Check for direct variable resets in tearDown (e.g., var_name = 0)
+                teardown_section = re.search(r'void tearDown\(void\)\s*{([^}]*)}', test_content, re.DOTALL)
+                has_direct_resets = False
+                if teardown_section:
+                    teardown_content = teardown_section.group(1)
+                    # Look for variable assignments to 0, 0.0f, NULL, etc.
+                    has_direct_resets = bool(re.search(r'\w+\s*=\s*(0|0\.0f|NULL|false|"DEFAULT");', teardown_content))
 
-            if not has_reset_functions and not has_direct_resets:
-                result['issues'].append("tearDown() function should reset stub variables (call counts and return values)")
+                if not has_reset_functions and not has_direct_resets:
+                    result['issues'].append("tearDown() function should reset stub variables (call counts and return values)")
 
         # Check for meaningful test content
         if len(test_names) == 0:
