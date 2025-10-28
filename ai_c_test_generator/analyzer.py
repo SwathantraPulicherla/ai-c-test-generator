@@ -112,13 +112,14 @@ class DependencyAnalyzer:
         """Find all C files in the repository, ONLY processing files under src/ directory"""
         c_files = []
         for root, dirs, files in os.walk(self.repo_path):
-            # Only process files in the src directory
-            if 'src' not in root.replace('\\', '/').split('/'):
-                continue
-
-            # Skip common build and hidden directories
+            # Skip common build and hidden directories first
             dirs[:] = [d for d in dirs if not d.startswith('.') and
-                      d not in ['build', 'cmake-build', 'node_modules']]
+                      d not in ['build', 'cmake-build', 'node_modules', 'temp', 'tmp']]
+
+            # Only process files in the src directory (not in build/src)
+            root_parts = root.replace('\\', '/').split('/')
+            if 'src' not in root_parts or 'build' in root_parts:
+                continue
 
             for file in files:
                 if file.endswith('.c'):

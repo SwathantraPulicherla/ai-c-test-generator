@@ -129,22 +129,30 @@ FUNCTIONS THAT NEED STUBS (implement these as configurable stub functions):
    - Function signatures must EXACTLY match the source code
    - NO calls to main() or functions that don't exist
 
-## 3. REALISTIC TEST VALUES (CRITICAL FOR QUALITY):
+## 3. MEANINGFUL TEST DESIGN (CRITICAL):
+   - Each test must verify ACTUAL FUNCTION BEHAVIOR, not just call functions
+   - Test the LOGIC and CALCULATIONS the function performs
+   - Avoid trivial tests that only check if function was called
+   - Focus on testing what the function DOES, not that it exists
+   - Every assertion must validate a meaningful outcome
+
+## 4. REALISTIC TEST VALUES (CRITICAL FOR QUALITY):
    - Temperature sensors: -40°C to +125°C (normal range: 0°C to 50°C)
    - Voltage sensors: 0V to 5V (never negative or >5.5V)
    - Current sensors: 0A to 10A (never negative)
    - Counters/timers: 0 to UINT32_MAX
    - Boolean states: only 0 or 1, true or false
    - NEVER test impossible values like absolute zero (-273°C) or negative voltages
+   - Use values that make physical sense for the domain
 
-## 4. FLOATING POINT HANDLING:
+## 5. FLOATING POINT HANDLING:
    - ALWAYS use TEST_ASSERT_FLOAT_WITHIN(tolerance, expected, actual)
    - Temperature tolerance: 0.1f degrees
    - Voltage tolerance: 0.01f volts
    - Current tolerance: 0.001f amps
    - NEVER use TEST_ASSERT_EQUAL_FLOAT
 
-## 5. STUB IMPLEMENTATION (HIGH QUALITY):
+## 6. STUB IMPLEMENTATION (HIGH QUALITY):
    - Implement stubs for ALL listed functions that need stubs
    - Stubs must have EXACT same signature as source functions
    - Use static variables: call_count, return_value, last_param
@@ -152,12 +160,13 @@ FUNCTIONS THAT NEED STUBS (implement these as configurable stub functions):
    - tearDown(): Reset ALL stub variables to 0/default
    - Allow test code to configure stub return values
 
-## 6. COMPREHENSIVE TEST SCENARIOS:
+## 7. COMPREHENSIVE & MEANINGFUL TEST SCENARIOS:
 
 ### NORMAL OPERATION TESTS:
    - Test with typical values in middle of operational range
+   - Verify correct calculations, conversions, and logic
    - Test expected behavior under normal conditions
-   - Verify correct calculations and logic
+   - Validate that functions produce correct outputs for given inputs
 
 ### EDGE CASE TESTS:
    - Minimum operational values (e.g., 0°C for temperature)
@@ -165,36 +174,48 @@ FUNCTIONS THAT NEED STUBS (implement these as configurable stub functions):
    - Boundary conditions (just above/below limits)
    - Zero values where applicable
    - Maximum valid values
+   - Test transitions between valid ranges
 
 ### ERROR CONDITION TESTS:
    - Invalid inputs (out of range values)
    - NULL pointers (if applicable)
    - Division by zero scenarios
    - Overflow conditions
+   - Test error handling and boundary validation
 
-## 7. UNITY FRAMEWORK BEST PRACTICES:
+## 8. AVOID NONSENSICAL TESTS:
+   - NO tests with random arbitrary values
+   - NO tests that don't validate actual function behavior
+   - NO redundant tests that check the same thing multiple ways
+   - NO tests that only verify function calls without checking results
+   - NO impossible physical scenarios (negative temperatures, negative voltages)
+
+## 9. UNITY FRAMEWORK BEST PRACTICES:
    - TEST_ASSERT_TRUE/TEST_ASSERT_FALSE for boolean results
    - TEST_ASSERT_EQUAL for integers and enums
    - TEST_ASSERT_FLOAT_WITHIN for floating point
    - TEST_ASSERT_EQUAL_STRING for strings
    - TEST_ASSERT_NULL/TEST_ASSERT_NOT_NULL for pointers
 
-## 8. TEST ISOLATION & STRUCTURE:
+## 10. TEST ISOLATION & STRUCTURE:
    - Each test function tests ONE specific behavior
    - Use descriptive test names: test_[function]_[scenario]
-   - setUp() initializes test state
-   - tearDown() cleans up and resets stubs
+   - setUp() initializes test state and configures stubs
+   - tearDown() cleans up and resets ALL stub variables
    - Tests should be independent and repeatable
+   - Each test should have a clear, single purpose
 
 # QUALITY VALIDATION CRITERIA (YOU MUST MEET THESE):
 
 ✅ COMPILATION: Code must compile without errors
-✅ REALISTIC: Use only physically possible test values
-✅ EDGE CASES: Include min/max/boundary value tests
-✅ STUB RESET: tearDown() must reset ALL stub variables
+✅ MEANINGFUL: Every test validates actual function behavior and logic
+✅ REALISTIC: Use only physically possible test values and scenarios
+✅ EDGE CASES: Include min/max/boundary value tests with meaningful assertions
+✅ STUB RESET: tearDown() must reset ALL stub variables (call_count, return_value, etc.)
 ✅ FLOAT TOLERANCE: Use TEST_ASSERT_FLOAT_WITHIN, never TEST_ASSERT_EQUAL_FLOAT
-✅ TEST ISOLATION: Each test independent, proper setUp/tearDown
-✅ MEANINGFUL ASSERTIONS: Test actual behavior, not just function calls
+✅ TEST ISOLATION: Each test independent, proper setUp/tearDown with complete reset
+✅ NO TRIVIAL TESTS: Avoid tests that only check function calls without validating results
+✅ PHYSICALLY POSSIBLE: No negative voltages, impossible temperatures, or nonsensical values
 
 # INSTRUCTIONS:
 
@@ -203,10 +224,10 @@ Create a complete Unity test file named test_{os.path.basename(analysis['file_pa
 Generate stub functions for ALL listed functions that need stubs
 Stubs should track call counts and allow configuring return values
 
-Test normal cases, edge cases, and error conditions
-Use TEST_ASSERT_* macros appropriately
+Test normal cases, edge cases, and error conditions with MEANINGFUL assertions
+Use TEST_ASSERT_* macros appropriately for actual behavior validation
 Include setUp() and tearDown() functions for proper test isolation
-CRITICAL: tearDown() must reset ALL stub variables (call counts and return values) to 0/default values
+CRITICAL: tearDown() must reset ALL stub variables to 0/default values
 
 Generate ONLY the complete C test file code. No explanations.
 """
