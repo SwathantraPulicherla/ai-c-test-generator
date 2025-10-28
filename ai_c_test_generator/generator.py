@@ -18,8 +18,8 @@ class SmartTestGenerator:
     def __init__(self, api_key: str):
         genai.configure(api_key=api_key)
 
-        # Use modern API (v0.8.0+) with fallback models
-        self.models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+        # Use modern API (v0.8.0+) with gemini-2.5-pro as primary model
+        self.models_to_try = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
         self.model = None
 
         for model_name in self.models_to_try:
