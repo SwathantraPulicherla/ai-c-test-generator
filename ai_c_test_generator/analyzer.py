@@ -182,3 +182,38 @@ class DependencyAnalyzer:
                 dependency_map[func['name']] = file_path
 
         return dependency_map
+
+    def analyze(self, repo_path):
+        """Analyze C source files and extract function signatures."""
+        src_path = os.path.join(repo_path, 'src')
+        if not os.path.exists(src_path):
+            raise ValueError(f"Source directory not found: {src_path}")
+        
+        self.functions = {}
+        for filename in os.listdir(src_path):
+            if filename.endswith('.c'):
+                # Skip main.c as it's the application entry point and not suitable for unit testing
+                if filename == 'main.c':
+                    continue
+                file_path = os.path.join(src_path, filename)
+                self._analyze_file(file_path)
+        return self.functions
+
+    def _analyze_file(self, file_path):
+        """Analyze a single C file to extract function signatures."""
+        functions = self._extract_functions(file_path)
+        file_name = os.path.basename(file_path)
+        self.functions[file_name] = functions
+
+        # For each function, find where it is called (cross-referencing other files)
+        for func in functions:
+            called_funcs = self._find_called_functions(file_path)
+            func['called_by'] = list(called_funcs)
+
+            # For each called function, find its file implementation
+            func['implementation'] = None
+            if called_funcs:
+                implementations = self.find_function_implementations(list(called_funcs))
+                func['implementation'] = {k: v for k, v in implementations.items() if k in called_funcs}
+
+        return functions
