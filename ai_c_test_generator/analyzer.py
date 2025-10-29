@@ -151,3 +151,34 @@ class DependencyAnalyzer:
                     break
 
         return implementations
+
+    def get_dependencies(self, module_name: str) -> List[str]:
+        """Return list of .c files (without .c) that module_name depends on, excluding main"""
+        if not hasattr(self, 'dependency_map'):
+            self.dependency_map = self._build_dependency_map()
+
+        deps = set()
+        file_path = os.path.join(self.repo_path, "src", f"{module_name}.c")
+        if not os.path.exists(file_path):
+            return []
+
+        analysis = self.analyze_file_dependencies(file_path)
+        for called_func in analysis['called_functions']:
+            if called_func in self.dependency_map:
+                dep_file = self.dependency_map[called_func]
+                dep_name = os.path.splitext(os.path.basename(dep_file))[0]
+                if dep_name != module_name and dep_name != "main":
+                    deps.add(dep_name)
+        return list(deps)
+
+    def _build_dependency_map(self) -> Dict[str, str]:
+        """Build a map of function_name -> source_file for the entire repository"""
+        all_c_files = self.find_all_c_files()
+        dependency_map = {}
+
+        for file_path in all_c_files:
+            functions = self._extract_functions(file_path)
+            for func in functions:
+                dependency_map[func['name']] = file_path
+
+        return dependency_map
