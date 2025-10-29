@@ -105,7 +105,7 @@ your-project/
 ├── tests/                  # Generated tests (created automatically)
 │   ├── test_main.c
 │   ├── test_utils.c
-│   └── verification_report/  # Validation reports
+│   └── compilation_report/  # Validation reports
 └── unity/                  # Unity framework (if not present)
 ```
 
@@ -178,7 +178,7 @@ GEMINI_API_KEY=your_api_key_here
 - Check that your API key is valid
 
 **"Compilation errors"**
-- Check the validation reports in `tests/verification_report/`
+- Check the validation reports in `tests/compilation_report/`
 - Common issues: missing includes, incorrect function signatures
 - The tool attempts to fix common issues automatically
 
