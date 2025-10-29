@@ -167,19 +167,21 @@ class SmartTestGenerator:
         source_name = os.path.splitext(os.path.basename(analysis['file_path']))[0]
 
         prompt = f"""
+You are a senior embedded C unit test engineer with 20+ years of experience using the Unity Test Framework (v2.5+). You MUST follow EVERY SINGLE RULE in this prompt without exception to generate a test file that achieves 100% quality: High rating (0 issues, compiles perfectly, realistic scenarios only). Failure to adhere will result in invalid output. Internally analyze the source code before generating: extract ALL functions, their EXACT signatures, public API (non-static), dependencies (internal vs external), and types (structs, unions, pointers, etc.).
+
 FIRST, READ THE ENTIRE SOURCE CODE. EXTRACT:
-- All function names and EXACT signatures
+- All function names and EXACT signatures (e.g., int main(void))
 - All #define, thresholds, ranges, magic numbers
 - All if/else/switch branches
 - All struct/union/bitfield definitions
-THEN, generate tests that cover 100% of this logic.
 
-You are a senior embedded C unit test engineer with 20+ years of experience using the Unity Test Framework (v2.5+). You MUST follow EVERY SINGLE RULE in this prompt without exception to generate a test file that achieves 100% quality: High rating (0 issues, compiles perfectly, realistic scenarios only). Failure to adhere will result in invalid output. Internally analyze the source code before generating: extract ALL functions, their EXACT signatures, public API (non-static), dependencies (internal vs external), and types (structs, unions, pointers, etc.).
+THEN, generate tests that cover 100% of this logic, including call sequences and return values.
 
 ABSOLUTE MANDATES (MUST ENFORCE THESE TO FIX BROKEN AND UNREALISTIC ISSUES)
 
-NO COMPILATION ERRORS: Test EVERY include, signature, and syntax mentally before outputting. ONLY use existing headers from source. NO invented functions or headers. Code MUST compile with CMake/GCC for embedded targets. For internal dependencies (functions defined in the same file), DO NOT stub or redefine them—test them directly or through calling functions. For external dependencies only, provide stubs without redefinition conflicts (assume linking excludes real implementations for stubbed externals).
-NO UNREALISTIC VALUES: STRICTLY enforce physical limits from source logic or domain knowledge. E.g., temperatures ALLOW negatives where valid (e.g., -40.0f to 125.0f); voltages 0.0f to 5.5f (no negatives unless signed in source). Use source-specific thresholds (e.g., extract >120.0f for "CRITICAL" from code). BAN absolute zero, overflows, or impossibles.
+NO COMPILATION ERRORS OR INCOMPLETE CODE: Output FULL, COMPLETE C code only. Mentally compile EVERY line before outputting (e.g., ensure all statements end with ';', all variables declared, no truncated lines like "extern int " or "int result = "). ONLY use existing headers from source. NO invented functions or headers. Code MUST compile with CMake/GCC for embedded targets. For internal dependencies (functions defined in the same file), DO NOT stub or redefine them—test them directly or through calling functions. For external dependencies only, provide stubs without redefinition conflicts (assume linking excludes real implementations for stubbed externals).
+HANDLE MAIN() SPECIFICALLY: For files containing main(), declare "extern int main(void);" and call it directly in tests (result = main();). Assert on return value (always 0 in simple main). Focus tests on call sequence, param passing, and return. Do NOT stub main().
+NO UNREALISTIC VALUES: STRICTLY enforce physical limits from source logic or domain knowledge. E.g., temperatures ALLOW negatives where valid (e.g., -40.0f to 125.0f); voltages 0.0f to 5.5f (no negatives unless signed in source). Use source-specific thresholds (e.g., extract >120.0f for "CRITICAL" from code). BAN absolute zero, overflows, or impossibles. For temp tests, use negatives like -10.0f where valid.
 MEANINGFUL TESTS ONLY: EVERY test MUST validate the function's core logic, calculations, or outputs EXACTLY as per source. Match assertions to source behavior (e.g., if range is >= -40 && <=125, assert true for -40.0f, false for -40.1f). NO trivial "function called" tests unless paired with output validation. Each assertion MUST check a specific, expected result based on input.
 STUBS MUST BE PERFECT: ONLY for listed external dependencies. Use EXACT signature, control struct, and FULL reset in setUp() AND tearDown() using memset or explicit zeroing. NO partial resets. Capture params if used in assertions. NO stubs for internals to avoid duplicates.
 FLOATS: MANDATORY TEST_ASSERT_FLOAT_WITHIN with domain-specific tolerance (e.g., 0.1f for temp). BAN TEST_ASSERT_EQUAL_FLOAT.
@@ -198,16 +200,16 @@ IMPROVED RULES TO PREVENT BROKEN/UNREALISTIC OUTPUT
 1. OUTPUT FORMAT (STRICT - ONLY C CODE):
 Output PURE C code ONLY. Start with /* test_{source_name}.c – Auto-generated Expert Unity Tests */
 NO markdown, NO ```c:disable-run
-File structure EXACTLY: Comment -> Includes -> Stubs (only for externals) -> setUp/tearDown -> Tests -> main with UNITY_BEGIN/END and ALL RUN_TEST calls.
+File structure EXACTLY: Comment -> Includes -> Extern declarations (for main and stubs) -> Stubs (only for externals) -> setUp/tearDown -> Tests -> main with UNITY_BEGIN/END and ALL RUN_TEST calls.
 
 2. COMPILATION SAFETY (FIX BROKEN TESTS):
-Includes: ONLY "unity.h", "{source_name}.h" (public API), and standard <stdint.h>, <stdbool.h>, <string.h> if used in source or for memset.
+Includes: ONLY "unity.h", and standard <stdint.h>, <stdbool.h>, <string.h> if used in source or for memset. Do NOT include "{source_name}.h" if not present in source or necessary (e.g., for main.c, skip if no public API).
 Signatures: COPY EXACTLY from source. NO mismatches in types, params, returns.
 NO calls to undefined functions. For internals (same file), call directly without stubbing to avoid duplicates/linker errors.
-Syntax: Perfect C - matching braces, semicolons, no unused vars, embedded-friendly (no non-standard libs).
+Syntax: Perfect C - complete statements, matching braces, semicolons, no unused vars, embedded-friendly (no non-standard libs). Ensure all code is fully written (no placeholders).
 
 3. MEANINGFUL TEST DESIGN (FIX TRIVIAL/UNREALISTIC):
-Focus: Test FUNCTION LOGIC exactly (e.g., for validate_range: assert true/false based on precise source conditions like >= -40 && <=125).
+Focus: Test FUNCTION LOGIC exactly (e.g., for validate_range: assert true/false based on precise source conditions like >= -40 && <=125). For main(), test call sequence (e.g., get_temperature_celsius called once, param to check_temperature_status matches return), and main return 0.
 BAN: Tests with wrong expectations (cross-check source thresholds). BAN "was_called" alone - ALWAYS validate outputs/params.
 Each test: 1 purpose, 3-5 per public function, covering ALL branches/logic from source.
 
@@ -231,6 +233,7 @@ Stub func: Increment count, store params, return configured value.
 setUp(): memset(&stub_xxx, 0, sizeof(stub_xxx)); for ALL stubs + any init.
 tearDown(): SAME full reset for ALL stubs.
 For non-deterministic (e.g., rand-based): Stub to make deterministic; test ranges via multiple configs.
+Do NOT stub printf—comment that output assertion requires redirection (not implemented here).
 
 7. COMPREHENSIVE TEST SCENARIOS (MEANINGFUL & REALISTIC):
 Normal: Mid-range inputs from source, assert correct computation (e.g., temp status "NORMAL" for 25.0f).
@@ -244,6 +247,7 @@ NO duplicate/redundant tests (unique per branch).
 NO physical impossibilities or ignoring source thresholds.
 NO tests ignoring outputs - always assert results.
 For internals like rand-based: Stub and test deterministic outputs; check ranges (e.g., 0-1023).
+For main with printf: Assert only on stubs and return; comment on printf limitation.
 
 9. UNITY BEST PRACTICES:
 Appropriate asserts: EQUAL_INT/HEX for ints, FLOAT_WITHIN for floats, EQUAL_STRING for chars, TRUE/FALSE for bools, NULL/NOT_NULL for pointers, EQUAL_MEMORY for structs/unions.
