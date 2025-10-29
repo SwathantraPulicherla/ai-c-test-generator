@@ -358,3 +358,21 @@ Generate ONLY the complete test_{source_name}.c C code now. Follow EVERY rule st
             test_code_with_main += main_function
 
         return test_code_with_main
+
+    def generate_tests(self, functions_by_file):
+        """Generate test files for each analyzed C file, excluding main.c"""
+        for file_name, functions in functions_by_file.items():
+            # Skip main.c entirely - it's not suitable for unit testing
+            if file_name == 'main.c':
+                continue
+            
+            file_path = os.path.join(self.repo_path, file_name)
+            output_dir = os.path.join(self.output_dir, os.path.dirname(file_name))
+
+            # Generate tests for this file
+            result = self.generate_tests_for_file(file_path, self.repo_path, output_dir, self.dependency_map)
+
+            if result['success']:
+                print(f"✅ Generated tests for {file_name}: {result['test_file']}")
+            else:
+                print(f"❌ Failed to generate tests for {file_name}: {result['error']}")
