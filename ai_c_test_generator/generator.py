@@ -164,94 +164,105 @@ class SmartTestGenerator:
 
         file_content = self._read_file_safely(analysis['file_path'])
         rel_path = os.path.relpath(analysis['file_path'], repo_path)
+        source_name = os.path.splitext(os.path.basename(analysis['file_path']))[0]
 
         prompt = f"""
-You are a senior embedded C unit test engineer with 20+ years of experience using the Unity Test Framework (v2.5+). You MUST follow EVERY SINGLE RULE in this prompt without exception to generate a test file that achieves 100% quality: High rating (0 issues, compiles perfectly, realistic scenarios only). Failure to adhere will result in invalid output. Internally analyze the source code before generating.
+FIRST, READ THE ENTIRE SOURCE CODE. EXTRACT:
+- All function names and EXACT signatures
+- All #define, thresholds, ranges, magic numbers
+- All if/else/switch branches
+- All struct/union/bitfield definitions
+THEN, generate tests that cover 100% of this logic.
+
+You are a senior embedded C unit test engineer with 20+ years of experience using the Unity Test Framework (v2.5+). You MUST follow EVERY SINGLE RULE in this prompt without exception to generate a test file that achieves 100% quality: High rating (0 issues, compiles perfectly, realistic scenarios only). Failure to adhere will result in invalid output. Internally analyze the source code before generating: extract ALL functions, their EXACT signatures, public API (non-static), dependencies (internal vs external), and types (structs, unions, pointers, etc.).
 
 ABSOLUTE MANDATES (MUST ENFORCE THESE TO FIX BROKEN AND UNREALISTIC ISSUES)
 
-NO COMPILATION ERRORS: Test EVERY include, signature, and syntax mentally before outputting. ONLY use existing headers from source. NO invented functions or headers. Code MUST compile with CMake/GCC for embedded targets.
-NO UNREALISTIC VALUES: STRICTLY enforce physical limits. E.g., temperatures NEVER below -40°C or above 125°C; voltages NEVER negative or >5.5V. Replace any unrealistic value with a valid one (e.g., -273°C -> -40°C).
-MEANINGFUL TESTS ONLY: EVERY test MUST validate the function's core logic, calculations, or outputs. NO trivial "function called" tests. Each assertion MUST check a specific, expected result based on input.
-STUBS MUST BE PERFECT: For EVERY stubbed function, use EXACT signature, control struct, and FULL reset in setUp() AND tearDown() using memset or explicit zeroing. NO partial resets.
-FLOATS: MANDATORY TEST_ASSERT_FLOAT_WITHIN with specified tolerance. BAN TEST_ASSERT_EQUAL_FLOAT.
-TEST ISOLATION: EVERY test independent. setUp() for init/config, tearDown() for COMPLETE cleanup/reset of ALL stubs (call_count=0, return_value=default, etc.).
-NO NONSENSE: BAN random values, redundant tests, impossible scenarios. Use descriptive names and 1-line comments explaining WHY the assertion is expected.
+NO COMPILATION ERRORS: Test EVERY include, signature, and syntax mentally before outputting. ONLY use existing headers from source. NO invented functions or headers. Code MUST compile with CMake/GCC for embedded targets. For internal dependencies (functions defined in the same file), DO NOT stub or redefine them—test them directly or through calling functions. For external dependencies only, provide stubs without redefinition conflicts (assume linking excludes real implementations for stubbed externals).
+NO UNREALISTIC VALUES: STRICTLY enforce physical limits from source logic or domain knowledge. E.g., temperatures ALLOW negatives where valid (e.g., -40.0f to 125.0f); voltages 0.0f to 5.5f (no negatives unless signed in source). Use source-specific thresholds (e.g., extract >120.0f for "CRITICAL" from code). BAN absolute zero, overflows, or impossibles.
+MEANINGFUL TESTS ONLY: EVERY test MUST validate the function's core logic, calculations, or outputs EXACTLY as per source. Match assertions to source behavior (e.g., if range is >= -40 && <=125, assert true for -40.0f, false for -40.1f). NO trivial "function called" tests unless paired with output validation. Each assertion MUST check a specific, expected result based on input.
+STUBS MUST BE PERFECT: ONLY for listed external dependencies. Use EXACT signature, control struct, and FULL reset in setUp() AND tearDown() using memset or explicit zeroing. NO partial resets. Capture params if used in assertions. NO stubs for internals to avoid duplicates.
+FLOATS: MANDATORY TEST_ASSERT_FLOAT_WITHIN with domain-specific tolerance (e.g., 0.1f for temp). BAN TEST_ASSERT_EQUAL_FLOAT.
+TEST ISOLATION: EVERY test independent. setUp() for init/config/stub setup, tearDown() for COMPLETE cleanup/reset of ALL stubs (call_count=0, return_value=default, etc.).
+NO NONSENSE: BAN random/arbitrary values (use source-derived, e.g., mid-range from logic). BAN redundancy (unique scenarios). BAN physical impossibilities. Use descriptive names and 1-line comments explaining WHY the assertion is expected based on source.
+
+INPUT: SOURCE CODE TO TEST (DO NOT MODIFY)
+c/* ==== BEGIN src/{source_name}.c ==== */
+{file_content}
+/* ==== END src/{source_name}.c ==== */
+EXTERNAL FUNCTIONS TO STUB (only these; infer signatures from calls if needed; use typical embedded types):
+{chr(10).join(f"- {func_name}" for func_name in functions_that_need_stubs) or "- None"}
 
 IMPROVED RULES TO PREVENT BROKEN/UNREALISTIC OUTPUT
 
 1. OUTPUT FORMAT (STRICT - ONLY C CODE):
-Output PURE C code ONLY. Start with #include "unity.h"
+Output PURE C code ONLY. Start with /* test_{source_name}.c – Auto-generated Expert Unity Tests */
 NO markdown, NO ```c:disable-run
-File structure EXACTLY: Includes -> Stubs -> setUp/tearDown -> Tests -> main with UNITY_BEGIN/END and ALL RUN_TEST calls.
+File structure EXACTLY: Comment -> Includes -> Stubs (only for externals) -> setUp/tearDown -> Tests -> main with UNITY_BEGIN/END and ALL RUN_TEST calls.
 
 2. COMPILATION SAFETY (FIX BROKEN TESTS):
-Includes: ONLY "unity.h", "<source>.h" (e.g., "temp_sensor.h"), and standard <stdint.h>, <stdbool.h> if used in source.
+Includes: ONLY "unity.h", "{source_name}.h" (public API), and standard <stdint.h>, <stdbool.h>, <string.h> if used in source or for memset.
 Signatures: COPY EXACTLY from source. NO mismatches in types, params, returns.
-NO calls to undefined functions (e.g., no main()). Stubs MUST match calls.
+NO calls to undefined functions. For internals (same file), call directly without stubbing to avoid duplicates/linker errors.
 Syntax: Perfect C - matching braces, semicolons, no unused vars, embedded-friendly (no non-standard libs).
 
 3. MEANINGFUL TEST DESIGN (FIX TRIVIAL/UNREALISTIC):
-Focus: Test FUNCTION LOGIC (e.g., for convert_c_to_f: assert 0°C -> 32°F within tolerance).
-BAN: Tests like "TEST_ASSERT_TRUE(was_called)" alone - ALWAYS pair with output validation.
-Each test: 1 purpose, 3-5 per function, covering logic branches.
+Focus: Test FUNCTION LOGIC exactly (e.g., for validate_range: assert true/false based on precise source conditions like >= -40 && <=125).
+BAN: Tests with wrong expectations (cross-check source thresholds). BAN "was_called" alone - ALWAYS validate outputs/params.
+Each test: 1 purpose, 3-5 per public function, covering ALL branches/logic from source.
 
 4. REALISTIC TEST VALUES (FIX UNREALISTIC - ENFORCE LIMITS):
-Temperatures: STRICT -40.0f to 125.0f; normal 0.0f-50.0f. E.g., min: -40.0f, max: 125.0f, nominal: 25.0f.
-Voltages: 0.0f to 5.0f (max 5.5f for edges).
+Extract ranges/thresholds from source (e.g., -40.0f to 125.0f for validate; -10.0f for cold).
+Temperatures: -40.0f to 125.0f (allow negatives if in source); normal 0.0f-50.0f. E.g., min: -40.0f, max: 125.0f, nominal: 25.0f, cold: -10.1f.
+Voltages: 0.0f to 5.0f (max 5.5f for edges) unless source allows negatives.
 Currents: 0.0f to 10.0f.
-Integers: Within type limits, no overflows.
+Integers: Within type limits/source ranges (e.g., raw 0-1023 from rand() % 1024).
 Pointers: Valid or NULL only for error tests.
-BAN: Negative temps/volts, absolute zero, huge numbers (>1e6 unless domain-specific).
+BAN: Negative temps/volts unless source handles; absolute zero; huge numbers (>1e6 unless domain-specific).
 
 5. FLOATING POINT HANDLING (MANDATORY):
-ALWAYS: TEST_ASSERT_FLOAT_WITHIN(0.1f, expected, actual) for temp; adjust tolerance per domain.
+ALWAYS: TEST_ASSERT_FLOAT_WITHIN(tolerance, expected, actual) - use 0.1f for temp, 0.01f for voltage, etc.
 NEVER equal checks for floats.
 
 6. STUB IMPLEMENTATION (FIX BROKEN STUBS):
-For EACH needed stub: Exact prototype + control struct (return_value, was_called, call_count, captured params).
-Example struct: typedef struct {{ float return_value; bool was_called; uint32_t call_count; }} stub_adc_read_t;
+ONLY for listed externals: Exact prototype + control struct (return_value, was_called, call_count, captured params if asserted).
+Example struct: typedef struct {{ float return_value; bool was_called; uint32_t call_count; int last_param; }} stub_xxx_t; static stub_xxx_t stub_xxx = {{0}};
 Stub func: Increment count, store params, return configured value.
-setUp(): memset(&stub_xxx, 0, sizeof(stub_xxx)); for ALL stubs.
+setUp(): memset(&stub_xxx, 0, sizeof(stub_xxx)); for ALL stubs + any init.
 tearDown(): SAME full reset for ALL stubs.
+For non-deterministic (e.g., rand-based): Stub to make deterministic; test ranges via multiple configs.
 
 7. COMPREHENSIVE TEST SCENARIOS (MEANINGFUL & REALISTIC):
-Normal: Mid-range inputs, assert correct computation (e.g., temp conversion formula).
-Edge: Min/max valid, zero, boundaries - assert handles correctly without crash.
-Error: Invalid (e.g., simulate stub return out-of-range), NULL, overflow - assert error code/ safe output.
+Normal: Mid-range inputs from source, assert correct computation (e.g., temp status "NORMAL" for 25.0f).
+Edge: Exact min/max from source (e.g., -40.0f true, -40.1f false; -10.0f "NORMAL", -10.1f "COLD").
+Error: Invalid inputs (out-of-range, NULL if applicable), simulate via stubs - assert error code/safe output.
+Cover ALL branches: If/else, returns, etc.
 
 8. AVOID BAD PATTERNS (PREVENT COMMON FAILURES):
-NO arbitrary values (e.g., 42 without reason).
-NO duplicate tests.
-NO physical impossibilities.
-NO tests ignoring outputs.
+NO arbitrary values (derive from source, e.g., raw=500 for mid).
+NO duplicate/redundant tests (unique per branch).
+NO physical impossibilities or ignoring source thresholds.
+NO tests ignoring outputs - always assert results.
+For internals like rand-based: Stub and test deterministic outputs; check ranges (e.g., 0-1023).
 
 9. UNITY BEST PRACTICES:
-Appropriate asserts: EQUAL_INT for ints, FLOAT_WITHIN for floats, etc.
-Comments: 1-line above EACH assert: // Expected: 0°C converts to 32°F
+Appropriate asserts: EQUAL_INT/HEX for ints, FLOAT_WITHIN for floats, EQUAL_STRING for chars, TRUE/FALSE for bools, NULL/NOT_NULL for pointers, EQUAL_MEMORY for structs/unions.
+Comments: 1-line above EACH assert: // Expected: [source-based reason, e.g., 25.0f is NORMAL per >85 check]
+Handle complex types: Field-by-field for structs, both views for unions, masks for bitfields, arrays with EQUAL_xxx_ARRAY.
 
 10. STRUCTURE & ISOLATION:
-Test names: test_function_normal_operation, test_function_min_edge, etc.
-setUp/tearDown: ALWAYS present, even if minimal. Full stub reset in BOTH.
-
-SOURCE CODE TO TEST:
-```c
-{file_content}
-```
-
-FUNCTIONS TO TEST:
-{chr(10).join(f"- {func['return_type']} {func['name']}" for func in analysis['functions'])}
-
-FUNCTIONS THAT NEED STUBS (implement these as configurable stub functions):
-{chr(10).join(f"- {func_name}" for func_name in functions_that_need_stubs) or "- None"}
+Test names: test_[function]normal_mid_range, test[function]_min_edge_valid, etc.
+setUp/tearDown: ALWAYS present. Full stub reset in BOTH. Minimal if no state.
 
 QUALITY SELF-CHECK (DO INTERNALLY BEFORE OUTPUT):
-Compiles? Yes/No - if No, fix.
-Realistic? All values in limits? Yes/No.
-Meaningful? All tests check logic? Yes/No.
-Stubs reset fully? Yes/No.
+Compiles? (No duplicates, exact sigs) Yes/No - if No, fix.
+Realistic? (Values match source ranges, allow valid negatives) Yes/No.
+Meaningful? (Assertions match source logic exactly, cover branches) Yes/No.
+Stubs? (Only externals, full reset) Yes/No.
+Coverage? (All branches, no gaps/redundancy) Yes/No.
 
-Generate ONLY the complete C test file code. No explanations.
+FINAL INSTRUCTION:
+Generate ONLY the complete test_{source_name}.c C code now. Follow EVERY rule strictly. Output nothing else.
 """
         return prompt
 
