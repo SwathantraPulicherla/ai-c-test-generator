@@ -210,7 +210,7 @@ def main():
         # Save validation reports
         if validation_reports:
             print(f"\n📊 Saving validation reports...")
-            report_dir = os.path.join(args.repo_path, args.output, "verification_report")
+            report_dir = os.path.join(args.repo_path, args.output, "compilation_report")
 
             for report in validation_reports:
                 validator.save_validation_report(report, report_dir)
@@ -220,7 +220,7 @@ def main():
         print(f"   Generated: {successful_generations}/{len(c_files)} files")
         print(f"   Tests saved to: {output_dir}")
         if validation_reports:
-            print(f"   Reports saved to: {os.path.join(args.output, 'verification_report')}")
+            print(f"   Reports saved to: {os.path.join(args.output, 'compilation_report')}")
 
         # Overall success check
         if successful_generations == 0:
