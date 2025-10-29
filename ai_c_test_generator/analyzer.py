@@ -34,15 +34,15 @@ class DependencyAnalyzer:
             content_clean = re.sub(r'//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', '', content, flags=re.MULTILINE|re.DOTALL)
 
             # Match function definitions
-            pattern = r'(\w+)\s+(\w+)\s*\([^)]*\)\s*\{'
+            pattern = r'(\w+\s*\*?)\s+(\w+)\s*\([^)]*\)\s*\{'
             matches = re.finditer(pattern, content_clean)
 
             for match in matches:
                 return_type, func_name = match.groups()
                 functions.append({
                     'name': func_name,
-                    'return_type': return_type,
-                    'signature': f"{return_type} {func_name}(...)"
+                    'return_type': return_type.strip(),
+                    'signature': f"{return_type.strip()} {func_name}(...)"
                 })
         except Exception as e:
             print(f"Warning: Could not parse functions from {file_path}: {e}")
