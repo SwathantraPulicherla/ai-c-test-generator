@@ -291,6 +291,12 @@ Generate ONLY the complete test_{source_name}.c C code now. Follow EVERY rule st
             test_code
         )
 
+        # Fix incorrect Unity macro names
+        test_code = re.sub(r'TEST_ASSERT_GREATER_THAN_EQUAL_INT', 'TEST_ASSERT_GREATER_OR_EQUAL_INT', test_code)
+        test_code = re.sub(r'TEST_ASSERT_LESS_THAN_EQUAL_INT', 'TEST_ASSERT_LESS_OR_EQUAL_INT', test_code)
+        test_code = re.sub(r'TEST_ASSERT_GREATER_THAN_INT', 'TEST_ASSERT_GREATER_OR_EQUAL_INT', test_code)
+        test_code = re.sub(r'TEST_ASSERT_LESS_THAN_INT', 'TEST_ASSERT_LESS_OR_EQUAL_INT', test_code)
+
         # Fix unrealistic temperature values (absolute zero or impossible ranges)
         test_code = re.sub(r'-273\.15f?', '-40.0f', test_code)  # Replace absolute zero with realistic minimum
         test_code = re.sub(r'1e10+', '1000.0f', test_code)      # Replace extremely large values
