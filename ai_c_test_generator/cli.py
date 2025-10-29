@@ -145,12 +145,17 @@ def main():
             print("📋 Building dependency map...")
         dependency_map = generator.build_dependency_map(args.repo_path)
 
-        # Find C files in source directory
+        # Find C files in source directory (excluding main.c)
         source_path = os.path.join(args.repo_path, args.source_dir)
         c_files = []
         for root, dirs, files in os.walk(source_path):
             for file in files:
                 if file.endswith('.c'):  # Only process .c files, not headers
+                    # Skip main.c as it's not suitable for unit testing
+                    if file == 'main.c':
+                        if args.verbose:
+                            print(f"⏭️ Skipping main.c (application entry point)")
+                        continue
                     c_files.append(os.path.join(root, file))
 
         if args.verbose:
