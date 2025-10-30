@@ -115,7 +115,7 @@ class SmartTestGenerator:
         print(f"   Mapped {len(dependency_map)} functions across {len(all_c_files)} files")
         return dependency_map
 
-    def generate_tests_for_file(self, file_path: str, repo_path: str, output_dir: str, dependency_map: Dict[str, str]) -> Dict:
+    def generate_tests_for_file(self, file_path: str, repo_path: str, output_dir: str, dependency_map: Dict[str, str], validation_feedback: Dict = None) -> Dict:
         """Generate tests for a SINGLE file with proper context"""
         analyzer = DependencyAnalyzer(repo_path)
 
@@ -136,7 +136,7 @@ class SmartTestGenerator:
         print(f"   📋 {os.path.basename(file_path)}: {len(analysis['functions'])} functions, {len(functions_that_need_stubs)} need stubs")
 
         # Build targeted prompt for this file only
-        prompt = self._build_targeted_prompt(analysis, functions_that_need_stubs, repo_path)
+        prompt = self._build_targeted_prompt(analysis, functions_that_need_stubs, repo_path, validation_feedback)
 
         # Generate tests using modern API with fallback support
         try:
@@ -159,12 +159,23 @@ class SmartTestGenerator:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def _build_targeted_prompt(self, analysis: Dict, functions_that_need_stubs: List[str], repo_path: str) -> str:
+    def _build_targeted_prompt(self, analysis: Dict, functions_that_need_stubs: List[str], repo_path: str, validation_feedback: Dict = None) -> str:
         """Build a focused prompt for a single file with stub requirements"""
 
         file_content = self._read_file_safely(analysis['file_path'])
         rel_path = os.path.relpath(analysis['file_path'], repo_path)
         source_name = os.path.splitext(os.path.basename(analysis['file_path']))[0]
+
+        # Build validation feedback section
+        validation_feedback_section = "NONE - First generation attempt"
+        if validation_feedback:
+            issues = validation_feedback.get('issues', [])
+            if issues:
+                validation_feedback_section = "PREVIOUS ATTEMPT FAILED WITH THESE ISSUES - FIX THEM:\n" + "\n".join(f"- {issue}" for issue in issues[:5])  # Limit to first 5 issues
+                if len(issues) > 5:
+                    validation_feedback_section += f"\n- ... and {len(issues) - 5} more issues"
+            else:
+                validation_feedback_section = "NONE - Previous attempt was successful"
 
         prompt = f"""
 You are a senior embedded C unit test engineer with 20+ years of experience using the Unity Test Framework (v2.5+). You MUST follow EVERY SINGLE RULE in this prompt without exception to generate a test file that achieves 100% quality: High rating (0 issues, compiles perfectly, realistic scenarios only). Failure to adhere will result in invalid output. Internally analyze the source code before generating: extract ALL functions, their EXACT signatures, public API (non-static), dependencies (internal vs external), and types (structs, unions, pointers, etc.).
@@ -264,6 +275,9 @@ Realistic? (Values match source ranges, allow valid negatives) Yes/No.
 Meaningful? (Assertions match source logic exactly, cover branches) Yes/No.
 Stubs? (Only externals, full reset) Yes/No.
 Coverage? (All branches, no gaps/redundancy) Yes/No.
+
+VALIDATION FEEDBACK (CRITICAL - ADDRESS THESE SPECIFIC ISSUES):
+{validation_feedback_section}
 
 FINAL INSTRUCTION:
 Generate ONLY the complete test_{source_name}.c C code now. Follow EVERY rule strictly. Output nothing else.

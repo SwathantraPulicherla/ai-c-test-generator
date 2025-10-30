@@ -40,6 +40,12 @@ Examples:
   # Use environment variable for API key
   export GEMINI_API_KEY=your_key_here
   ai-c-testgen --repo-path /path/to/c/project
+
+  # Enable automatic regeneration for low-quality tests
+  ai-c-testgen --repo-path /path/to/c/project --regenerate-on-low-quality --max-regeneration-attempts 3
+
+  # Set quality threshold (only regenerate if below medium quality)
+  ai-c-testgen --repo-path /path/to/c/project --regenerate-on-low-quality --quality-threshold medium
         """
     )
 
@@ -80,6 +86,27 @@ Examples:
         '--version',
         action='version',
         version='%(prog)s 1.0.0'
+    )
+
+    parser.add_argument(
+        '--max-regeneration-attempts',
+        type=int,
+        default=2,
+        help='Maximum number of regeneration attempts for low-quality tests (default: 2)'
+    )
+
+    parser.add_argument(
+        '--regenerate-on-low-quality',
+        action='store_true',
+        help='Automatically regenerate tests that are validated as low quality'
+    )
+
+    parser.add_argument(
+        '--quality-threshold',
+        type=str,
+        choices=['high', 'medium', 'low'],
+        default='low',
+        help='Minimum acceptable quality threshold (default: low)'
     )
 
     return parser
@@ -168,32 +195,51 @@ def main():
         # Process each file
         successful_generations = 0
         validation_reports = []
+        regeneration_stats = {'total_regenerations': 0, 'successful_regenerations': 0}
 
         for file_path in c_files:
             rel_path = os.path.relpath(file_path, args.repo_path)
             print(f"🎯 Processing: {rel_path}")
 
-            try:
-                result = generator.generate_tests_for_file(
-                    file_path, args.repo_path, output_dir, dependency_map
-                )
+            max_attempts = args.max_regeneration_attempts + 1  # +1 for initial generation
+            attempt = 0
+            final_result = None
+            final_validation = None
 
-                if result['success']:
-                    print(f"   ✅ Generated: {os.path.basename(result['test_file'])}")
-                    successful_generations += 1
+            while attempt < max_attempts:
+                attempt += 1
+                try:
+                    # Generate tests for this file
+                    result = generator.generate_tests_for_file(
+                        file_path, args.repo_path, output_dir, dependency_map, final_validation if attempt > 1 else None
+                    )
+
+                    if not result['success']:
+                        print(f"   ❌ Generation failed: {result['error']}")
+                        break
 
                     # Validate the generated test
                     if args.verbose:
-                        print(f"   🔍 Validating...")
+                        print(f"   🔍 Validating (attempt {attempt})...")
                     validation_result = validator.validate_test_file(result['test_file'], file_path)
-                    validation_reports.append(validation_result)
+
+                    # Check if regeneration is needed
+                    needs_regeneration = (
+                        args.regenerate_on_low_quality and
+                        validation_result['quality'].lower() == 'low' and
+                        attempt < max_attempts
+                    )
 
                     # Print validation summary
                     status = "✅" if validation_result['compiles'] and validation_result['realistic'] else "⚠️"
                     quality = validation_result['quality']
                     compiles = 'Compiles' if validation_result['compiles'] else 'Broken'
                     realistic = 'Realistic' if validation_result['realistic'] else 'Unrealistic'
-                    print(f"   {status} {quality} quality ({compiles}, {realistic})")
+
+                    if attempt == 1:
+                        print(f"   {status} {quality} quality ({compiles}, {realistic})")
+                    else:
+                        print(f"   {status} {quality} quality ({compiles}, {realistic}) - regenerated")
 
                     if not validation_result['compiles'] and validation_result['issues']:
                         print(f"   Issues: {len(validation_result['issues'])}")
@@ -201,11 +247,38 @@ def main():
                             for issue in validation_result['issues'][:3]:  # Show first 3 issues
                                 print(f"     - {issue}")
 
-                else:
-                    print(f"   ❌ Failed: {result['error']}")
+                    # Store final results
+                    final_result = result
+                    final_validation = validation_result
 
-            except Exception as e:
-                print(f"   ❌ Error processing {rel_path}: {str(e)}")
+                    # Check if we should regenerate
+                    if needs_regeneration:
+                        print(f"   🔄 Low quality detected, regenerating (attempt {attempt + 1}/{max_attempts})...")
+                        regeneration_stats['total_regenerations'] += 1
+                        # Remove the low-quality test file so it can be regenerated
+                        if os.path.exists(result['test_file']):
+                            os.remove(result['test_file'])
+                        continue
+                    else:
+                        # Quality is acceptable or we've reached max attempts
+                        break
+
+                except Exception as e:
+                    print(f"   ❌ Error processing {rel_path}: {str(e)}")
+                    break
+
+            # Process final result
+            if final_result and final_result['success']:
+                successful_generations += 1
+                validation_reports.append(final_validation)
+
+                # Track successful regenerations
+                if attempt > 1:
+                    regeneration_stats['successful_regenerations'] += 1
+
+                print(f"   ✅ Final: {os.path.basename(final_result['test_file'])} ({final_validation['quality']} quality)")
+            else:
+                print(f"   ❌ Failed to generate acceptable test for {rel_path}")
 
         # Save validation reports
         if validation_reports:
@@ -221,6 +294,13 @@ def main():
         print(f"   Tests saved to: {output_dir}")
         if validation_reports:
             print(f"   Reports saved to: {os.path.join(args.output, 'compilation_report')}")
+
+        # Print regeneration statistics
+        if args.regenerate_on_low_quality:
+            print(f"   Regenerations: {regeneration_stats['successful_regenerations']}/{regeneration_stats['total_regenerations']} successful")
+            if regeneration_stats['total_regenerations'] > 0:
+                success_rate = (regeneration_stats['successful_regenerations'] / regeneration_stats['total_regenerations']) * 100
+                print(f"   Regeneration success rate: {success_rate:.1f}%")
 
         # Overall success check
         if successful_generations == 0:

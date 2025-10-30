@@ -68,6 +68,9 @@ ai-c-testgen [OPTIONS]
 - `--output DIR`: Output directory for generated tests (default: tests)
 - `--api-key KEY`: Google Gemini API key (can also use GEMINI_API_KEY env var)
 - `--source-dir DIR`: Source directory containing C files (default: src)
+- `--regenerate-on-low-quality`: Automatically regenerate tests that are validated as low quality
+- `--max-regeneration-attempts N`: Maximum number of regeneration attempts (default: 2)
+- `--quality-threshold LEVEL`: Minimum acceptable quality threshold (high/medium/low, default: low)
 - `--verbose, -v`: Enable verbose output
 - `--version`: Show version information
 
@@ -134,6 +137,41 @@ Each generated test includes a validation report with:
 - 📊 **Realism Check**: Validates test values are within realistic ranges
 - 🔧 **Issues List**: Detailed list of any problems found
 - 💡 **Improvement Suggestions**: Recommendations for fixing issues
+
+## Automatic Regeneration
+
+The tool can automatically regenerate low-quality tests to improve overall test quality:
+
+```bash
+# Enable automatic regeneration for low-quality tests
+ai-c-testgen --regenerate-on-low-quality
+
+# Set maximum regeneration attempts (default: 2)
+ai-c-testgen --regenerate-on-low-quality --max-regeneration-attempts 3
+
+# Only regenerate if quality is below medium threshold
+ai-c-testgen --regenerate-on-low-quality --quality-threshold medium
+```
+
+**How it works:**
+1. Generate initial test using AI
+2. Validate test quality and compilation
+3. If quality is below threshold, regenerate with improved prompts
+4. Repeat up to maximum attempts or until acceptable quality is achieved
+5. Report regeneration statistics and success rates
+
+**Dynamic Feedback Loop:**
+- Validation issues are fed back to the AI as specific correction instructions
+- Prompts include "PREVIOUS ATTEMPT FAILED WITH THESE ISSUES - FIX THEM:" followed by actual validation errors
+- AI receives targeted guidance to address compilation errors, unrealistic values, and logic issues
+- Each regeneration attempt becomes more focused on fixing specific problems
+
+**Benefits:**
+- 🎯 **Higher Quality**: Automatically improves test quality through iteration
+- 💰 **Cost Effective**: Only regenerates when necessary
+- 📈 **Better Coverage**: AI learns from validation feedback to generate better tests
+- ⚡ **Time Saving**: No manual review and regeneration cycles
+- 🧠 **Intelligent Feedback**: Uses validation issues to create targeted improvement prompts
 
 ## Unity Framework Integration
 
