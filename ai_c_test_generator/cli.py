@@ -111,8 +111,8 @@ Examples:
         '--quality-threshold',
         type=str,
         choices=['low', 'medium', 'high'],
-        default='medium',
-        help='Quality threshold for regeneration (low, medium, high). Only regenerate tests below this threshold (default: medium)'
+        default='high',
+        help='Quality threshold for regeneration (low, medium, high). Only regenerate tests below this threshold (default: high)'
     )
 
     return parser
