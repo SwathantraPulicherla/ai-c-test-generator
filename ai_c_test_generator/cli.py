@@ -324,12 +324,30 @@ def main():
             if current_quality_level < threshold_quality_level:
                 low_quality_tests.append(report['file'])
 
+        # Check quality of all generated tests
+        quality_levels = {'low': 0, 'medium': 1, 'high': 2}
+        threshold_quality_level = quality_levels.get(args.quality_threshold.lower(), 2)
+
+        low_quality_tests = []
+        for report in validation_reports:
+            current_quality_level = quality_levels.get(report['quality'].lower(), 0)
+            if current_quality_level < threshold_quality_level:
+                low_quality_tests.append(report['file'])
+
         if low_quality_tests:
-            print(f"❌ {len(low_quality_tests)} test(s) failed to meet {args.quality_threshold} quality threshold:")
-            for test_file in low_quality_tests:
-                print(f"   - {test_file}")
-            print("💡 Consider using --regenerate-on-low-quality to automatically improve test quality")
-            sys.exit(1)
+            if args.regenerate_on_low_quality:
+                # When regeneration is enabled, warn but don't fail
+                print(f"⚠️ {len(low_quality_tests)} test(s) still below {args.quality_threshold} quality threshold after regeneration:")
+                for test_file in low_quality_tests:
+                    print(f"   - {test_file}")
+                print("💡 Consider increasing --max-regeneration-attempts or relaxing --quality-threshold")
+            else:
+                # When regeneration is disabled, strict enforcement
+                print(f"❌ {len(low_quality_tests)} test(s) failed to meet {args.quality_threshold} quality threshold:")
+                for test_file in low_quality_tests:
+                    print(f"   - {test_file}")
+                print("💡 Use --regenerate-on-low-quality to automatically improve test quality")
+                sys.exit(1)
 
         # Overall success check
         if successful_generations == 0:

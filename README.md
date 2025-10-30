@@ -136,6 +136,9 @@ The tool enforces **high-quality test generation** by default:
 
 - **Default Quality Threshold**: High (only accepts tests with 0 critical issues)
 - **Automatic Cleanup**: Old compilation reports are removed before each run
+- **Flexible Enforcement**: 
+  - **Without regeneration**: Strict - fails if quality below threshold
+  - **With regeneration**: Lenient - warns but continues if max attempts exhausted
 - **Strict Validation**: Tests must compile, be realistic, and follow best practices
 - **Regeneration Support**: Automatically improves low-quality tests when enabled
 
