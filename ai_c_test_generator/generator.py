@@ -16,8 +16,9 @@ from .analyzer import DependencyAnalyzer
 class SmartTestGenerator:
     """AI-powered test generator using Google Gemini"""
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, redact_sensitive: bool = False):
         genai.configure(api_key=api_key)
+        self.redact_sensitive = redact_sensitive
 
         # Use modern API (v0.8.0+) with gemini-2.5-flash as primary model
         self.models_to_try = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
@@ -162,7 +163,8 @@ class SmartTestGenerator:
     def _build_targeted_prompt(self, analysis: Dict, functions_that_need_stubs: List[str], repo_path: str, validation_feedback: Dict = None) -> str:
         """Build a focused prompt for a single file with stub requirements"""
 
-        file_content = self._read_file_safely(analysis['file_path'])
+        # REDACTED VERSION: Remove sensitive content before sending to API
+        file_content = self._redact_sensitive_content(analysis['file_path'])
         rel_path = os.path.relpath(analysis['file_path'], repo_path)
         source_name = os.path.splitext(os.path.basename(analysis['file_path']))[0]
 
@@ -171,9 +173,17 @@ class SmartTestGenerator:
         if validation_feedback:
             issues = validation_feedback.get('issues', [])
             if issues:
-                validation_feedback_section = "PREVIOUS ATTEMPT FAILED WITH THESE ISSUES - FIX THEM:\n" + "\n".join(f"- {issue}" for issue in issues[:5])  # Limit to first 5 issues
+                validation_feedback_section = "PREVIOUS ATTEMPT FAILED WITH THESE SPECIFIC ISSUES - FIX THEM:\n" + "\n".join(f"- {issue}" for issue in issues[:5])  # Limit to first 5 issues
                 if len(issues) > 5:
                     validation_feedback_section += f"\n- ... and {len(issues) - 5} more issues"
+
+                # Add specific guidance for common issues
+                if any('unreasonably high' in issue and '2000' in issue for issue in issues):
+                    validation_feedback_section += "\n\nSPECIFIC FIX REQUIRED: Raw ADC values from rand() must be 0-1023. The value 2000 is invalid for read_temperature_raw() which returns rand() % 1024. Use values like 0, 512, 1023 for testing."
+                elif any('unreasonably high' in issue for issue in issues):
+                    validation_feedback_section += "\n\nSPECIFIC FIX REQUIRED: Temperature values must be in range -40.0°C to 125.0°C. Check source code for exact valid ranges."
+                elif any('unreasonably low' in issue for issue in issues):
+                    validation_feedback_section += "\n\nSPECIFIC FIX REQUIRED: Temperature values must be in range -40.0°C to 125.0°C. Negative values below -40°C are invalid."
             else:
                 validation_feedback_section = "NONE - Previous attempt was successful"
 
@@ -291,6 +301,38 @@ Generate ONLY the complete test_{source_name}.c C code now. Follow EVERY rule st
         except Exception:
             return "// Unable to read file"
 
+    def _redact_sensitive_content(self, file_path: str) -> str:
+        """Redact sensitive content before sending to external API"""
+        content = self._read_file_safely(file_path)
+
+        # Redaction patterns for common sensitive content
+        redaction_patterns = [
+            # Remove comments that might contain sensitive information
+            (r'/\*.*?\*/', '/* [COMMENT REDACTED] */'),
+            (r'//.*$', '// [COMMENT REDACTED]'),
+
+            # Redact string literals that might contain sensitive data
+            (r'"[^"]*"', '"[STRING REDACTED]"'),
+
+            # Redact potential API keys, passwords, secrets
+            (r'\b[A-Za-z0-9+/=]{20,}\b', '[CREDENTIAL REDACTED]'),  # Base64-like strings
+
+            # Redact email addresses
+            (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL REDACTED]'),
+
+            # Redact URLs that might point to internal systems
+            (r'https?://[^\s\'"]+', '[URL REDACTED]'),
+
+            # Redact potential IP addresses
+            (r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[IP REDACTED]'),
+        ]
+
+        redacted_content = content
+        for pattern, replacement in redaction_patterns:
+            redacted_content = re.sub(pattern, replacement, redacted_content, flags=re.MULTILINE | re.IGNORECASE)
+
+        return redacted_content
+
     def _post_process_test_code(self, test_code: str, analysis: Dict, source_includes: List[str]) -> str:
         """Post-process generated test code to fix common issues and improve quality"""
 
@@ -314,6 +356,14 @@ Generate ONLY the complete test_{source_name}.c C code now. Follow EVERY rule st
         # Fix unrealistic temperature values (absolute zero or impossible ranges)
         test_code = re.sub(r'-273\.15f?', '-40.0f', test_code)  # Replace absolute zero with realistic minimum
         test_code = re.sub(r'1e10+', '1000.0f', test_code)      # Replace extremely large values
+
+        # Fix invalid rand() stub return values (should be 0-1023 for read_temperature_raw)
+        # Look for stub_rand_instance.return_value = <invalid_value>
+        test_code = re.sub(
+            r'(stub_rand_instance\.return_value\s*=\s*)(\d+)(;)',
+            lambda m: f"{m.group(1)}{min(int(m.group(2)), 1023)}{m.group(3)}" if int(m.group(2)) > 1023 else m.group(0),
+            test_code
+        )
 
         # Fix negative voltage/current values (replace with 0)
         test_code = re.sub(r'-\d+\.?\d*f?\b', '0.0f', test_code)

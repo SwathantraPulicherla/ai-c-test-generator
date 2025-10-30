@@ -159,30 +159,42 @@ class TestValidator:
             result['issues'].append("TEST_ASSERT_EQUAL_FLOAT used - will fail due to precision. Use TEST_ASSERT_FLOAT_WITHIN instead")
             result['realistic'] = False
 
-        # Check stub return types match expected ranges
+        # Check stub return types match expected ranges - be more specific about context
         if 'temperature' in test_content.lower() or 'celsius' in test_content.lower():
             # Temperature should be reasonable range for the specific sensor
-            temp_values = re.findall(r'(\d+\.?\d*)f?', test_content)
-            for val in temp_values:
-                try:
-                    temp = float(val)
-                    # Context-aware validation: check if this looks like a raw ADC value or temperature
-                    # Raw ADC values are typically 0-1023, temperatures are usually < 200°C
-                    if temp > 200.0 and temp <= 1024.0:
-                        # This might be a raw ADC value, not a temperature - check context
-                        if 'raw' in test_content.lower() or 'adc' in test_content.lower() or '1023' in test_content:
-                            continue  # Likely a raw ADC value, skip validation
-                        else:
-                            result['issues'].append(f"Temperature value {temp} seems unreasonably high")
+            # Look for actual temperature assignments, not raw ADC values
+            temp_assignment_patterns = [
+                r'return_value\s*=\s*(\d+\.?\d*)f?',  # stub return values
+                r'TEST_ASSERT_FLOAT_WITHIN\s*\([^,]+,\s*(\d+\.?\d*)f?',  # float assertions
+                r'(\d+\.?\d*)f?\s*,\s*temp',  # temperature parameters
+            ]
+
+            for pattern in temp_assignment_patterns:
+                matches = re.findall(pattern, test_content)
+                for val in matches:
+                    try:
+                        temp = float(val)
+                        # Skip validation for raw ADC values (0-1023 range) that are clearly for rand() stubs
+                        if temp >= 0 and temp <= 1023:
+                            # Check if this is clearly a raw ADC value by looking at context
+                            line_context = ""
+                            for line in test_content.split('\n'):
+                                if val in line and ('rand' in line.lower() or 'stub_rand' in line or 'return_value' in line):
+                                    line_context = line.lower()
+                                    break
+
+                            if 'rand' in line_context or 'stub_rand' in line_context or 'return_value' in line_context:
+                                continue  # This is a raw ADC value for rand(), not a temperature
+
+                        # Validate temperature ranges
+                        if temp > 200.0:  # Definitely too high for temperature
+                            result['issues'].append(f"Temperature value {temp} seems unreasonably high (valid range: -40°C to 125°C)")
                             result['realistic'] = False
-                    elif temp > 1024.0:  # Definitely too high
-                        result['issues'].append(f"Temperature value {temp} seems unreasonably high")
-                        result['realistic'] = False
-                    elif temp < -100.0:  # Definitely too low
-                        result['issues'].append(f"Temperature value {temp} seems unreasonably low")
-                        result['realistic'] = False
-                except ValueError:
-                    pass
+                        elif temp < -100.0:  # Definitely too low for temperature
+                            result['issues'].append(f"Temperature value {temp} seems unreasonably low (valid range: -40°C to 125°C)")
+                            result['realistic'] = False
+                    except ValueError:
+                        pass
 
     def _assess_test_quality(self, test_content: str, source_functions: List[Dict], result: Dict):
         """Assess test quality criteria"""

@@ -102,11 +102,9 @@ Examples:
     )
 
     parser.add_argument(
-        '--quality-threshold',
-        type=str,
-        choices=['high', 'medium', 'low'],
-        default='high',
-        help='Minimum acceptable quality threshold (default: high)'
+        '--redact-sensitive',
+        action='store_true',
+        help='Redact sensitive content (comments, strings, credentials) before sending to API'
     )
 
     return parser
@@ -164,7 +162,7 @@ def main():
 
     try:
         # Initialize components
-        generator = SmartTestGenerator(api_key)
+        generator = SmartTestGenerator(api_key, redact_sensitive=args.redact_sensitive)
         validator = TestValidator(args.repo_path)
 
         # Build dependency map
@@ -196,8 +194,27 @@ def main():
         compilation_report_dir = os.path.join(output_dir, "compilation_report")
         if os.path.exists(compilation_report_dir):
             print("🧹 Cleaning up old compilation reports...")
-            import shutil
-            shutil.rmtree(compilation_report_dir)
+            try:
+                import shutil
+                shutil.rmtree(compilation_report_dir)
+            except (OSError, PermissionError) as e:
+                print(f"⚠️ Could not clean up old reports: {e}")
+                # Try to remove files individually
+                try:
+                    for root, dirs, files in os.walk(compilation_report_dir, topdown=False):
+                        for file in files:
+                            try:
+                                os.remove(os.path.join(root, file))
+                            except OSError:
+                                pass
+                        for dir_name in dirs:
+                            try:
+                                os.rmdir(os.path.join(root, dir_name))
+                            except OSError:
+                                pass
+                    os.rmdir(compilation_report_dir)
+                except OSError:
+                    print("⚠️ Skipping cleanup due to permission issues")
         os.makedirs(compilation_report_dir, exist_ok=True)
 
         # Process each file
