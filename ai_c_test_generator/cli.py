@@ -107,6 +107,14 @@ Examples:
         help='Redact sensitive content (comments, strings, credentials) before sending to API'
     )
 
+    parser.add_argument(
+        '--quality-threshold',
+        type=str,
+        choices=['low', 'medium', 'high'],
+        default='medium',
+        help='Quality threshold for regeneration (low, medium, high). Only regenerate tests below this threshold (default: medium)'
+    )
+
     return parser
 
 
