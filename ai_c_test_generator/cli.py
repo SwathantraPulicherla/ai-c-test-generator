@@ -105,8 +105,8 @@ Examples:
         '--quality-threshold',
         type=str,
         choices=['high', 'medium', 'low'],
-        default='low',
-        help='Minimum acceptable quality threshold (default: low)'
+        default='high',
+        help='Minimum acceptable quality threshold (default: high)'
     )
 
     return parser
@@ -192,6 +192,14 @@ def main():
         output_dir = os.path.join(args.repo_path, args.output)
         os.makedirs(output_dir, exist_ok=True)
 
+        # Clean up old compilation reports
+        compilation_report_dir = os.path.join(output_dir, "compilation_report")
+        if os.path.exists(compilation_report_dir):
+            print("🧹 Cleaning up old compilation reports...")
+            import shutil
+            shutil.rmtree(compilation_report_dir)
+        os.makedirs(compilation_report_dir, exist_ok=True)
+
         # Process each file
         successful_generations = 0
         validation_reports = []
@@ -223,10 +231,14 @@ def main():
                         print(f"   🔍 Validating (attempt {attempt})...")
                     validation_result = validator.validate_test_file(result['test_file'], file_path)
 
-                    # Check if regeneration is needed
+                    # Check if regeneration is needed based on quality threshold
+                    quality_levels = {'low': 0, 'medium': 1, 'high': 2}
+                    current_quality_level = quality_levels.get(validation_result['quality'].lower(), 0)
+                    threshold_quality_level = quality_levels.get(args.quality_threshold.lower(), 0)
+
                     needs_regeneration = (
                         args.regenerate_on_low_quality and
-                        validation_result['quality'].lower() == 'low' and
+                        current_quality_level < threshold_quality_level and
                         attempt < max_attempts
                     )
 
@@ -301,6 +313,23 @@ def main():
             if regeneration_stats['total_regenerations'] > 0:
                 success_rate = (regeneration_stats['successful_regenerations'] / regeneration_stats['total_regenerations']) * 100
                 print(f"   Regeneration success rate: {success_rate:.1f}%")
+
+        # Check quality of all generated tests
+        quality_levels = {'low': 0, 'medium': 1, 'high': 2}
+        threshold_quality_level = quality_levels.get(args.quality_threshold.lower(), 2)
+
+        low_quality_tests = []
+        for report in validation_reports:
+            current_quality_level = quality_levels.get(report['quality'].lower(), 0)
+            if current_quality_level < threshold_quality_level:
+                low_quality_tests.append(report['file'])
+
+        if low_quality_tests:
+            print(f"❌ {len(low_quality_tests)} test(s) failed to meet {args.quality_threshold} quality threshold:")
+            for test_file in low_quality_tests:
+                print(f"   - {test_file}")
+            print("💡 Consider using --regenerate-on-low-quality to automatically improve test quality")
+            sys.exit(1)
 
         # Overall success check
         if successful_generations == 0:

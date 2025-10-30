@@ -70,7 +70,7 @@ ai-c-testgen [OPTIONS]
 - `--source-dir DIR`: Source directory containing C files (default: src)
 - `--regenerate-on-low-quality`: Automatically regenerate tests that are validated as low quality
 - `--max-regeneration-attempts N`: Maximum number of regeneration attempts (default: 2)
-- `--quality-threshold LEVEL`: Minimum acceptable quality threshold (high/medium/low, default: low)
+- `--quality-threshold LEVEL`: Minimum acceptable quality threshold (**high**/medium/low, default: **high**)
 - `--verbose, -v`: Enable verbose output
 - `--version`: Show version information
 
@@ -91,9 +91,10 @@ ai-c-testgen --repo-path /home/user/my-c-project --source-dir source --output te
 ai-c-testgen --api-key YOUR_API_KEY_HERE
 ```
 
-**Verbose output:**
+**Generate tests with strict quality requirements:**
 ```bash
-ai-c-testgen --verbose
+ai-c-testgen --repo-path /path/to/project --regenerate-on-low-quality
+# Only accepts high-quality tests, regenerates automatically if needed
 ```
 
 ## Project Structure
@@ -129,14 +130,22 @@ your-project/
 - **Isolation**: Each test is properly isolated with setUp/tearDown functions
 - **Validation**: Tests are validated for compilation and realism
 
-## Validation Reports
+## Quality Assurance
 
-Each generated test includes a validation report with:
-- ✅ **Compilation Status**: Whether the test compiles successfully
-- 🎯 **Quality Rating**: High/Medium/Low quality assessment
-- 📊 **Realism Check**: Validates test values are within realistic ranges
-- 🔧 **Issues List**: Detailed list of any problems found
-- 💡 **Improvement Suggestions**: Recommendations for fixing issues
+The tool enforces **high-quality test generation** by default:
+
+- **Default Quality Threshold**: High (only accepts tests with 0 critical issues)
+- **Automatic Cleanup**: Old compilation reports are removed before each run
+- **Strict Validation**: Tests must compile, be realistic, and follow best practices
+- **Regeneration Support**: Automatically improves low-quality tests when enabled
+
+**Quality Levels:**
+- **High**: No compilation errors, realistic values, comprehensive coverage
+- **Medium**: Minor issues acceptable, good coverage
+- **Low**: Significant problems, requires regeneration
+
+**Clean Report Generation:**
+Each run starts with a clean slate - old validation reports are automatically removed to ensure fresh analysis.
 
 ## Automatic Regeneration
 
